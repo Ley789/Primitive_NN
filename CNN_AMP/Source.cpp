@@ -17,8 +17,9 @@ int main(void) {
 	input.push_back(1.5);
 	Model m(5);
 	m.AddFullNetworkLayer(1);
+	m.Finish();
 	auto res = m.GetHyp(input);
-	for (int i = 0; i < res.size(); i++) {
+	for (unsigned int i = 0; i < res.size(); i++) {
 		cout << res[i] << endl;
 	}
 	std::string t;

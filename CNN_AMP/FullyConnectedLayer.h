@@ -1,9 +1,13 @@
 #pragma once
 
-#include <random>
+
+
+//TODO RESTRUCT
+
 #include <amp.h>
 #include <time.h>
 #include <amp_math.h>
+#include <random>
 //TODO optminze operations (better use of parallelism)
 
 template <typename T>
@@ -12,6 +16,7 @@ class FullyConnectedLayer
 	//the weigths are strored the following way:
 	//the column w_ij where i is the reciving unit and j is the sending unit
 	concurrency::array_view<T,2> weights;
+	concurrency::array<T, 2> upWeights;
 	concurrency::array_view<T,1> input;
 	concurrency::array_view<T,1> output;
 	concurrency::array_view<T, 1> bias;
@@ -24,14 +29,13 @@ class FullyConnectedLayer
 	inline bool CheckDimension(int s) {
 		return s == numSendUnits;
 	}
-	//TODO generate the first prop e.g. the delta of output layer
-	void ComputeBackwardDelta(const concurrency::array_view<T, 1> &prop);
 
 public:
 	//TODO init weights but not output
 	//w must have r * c elements
-	FullyConnectedLayer(int w[], int r, int c);
 	FullyConnectedLayer(int r, int c);
+	FullyConnectedLayer(int w[], int r, int c);
+
 	~FullyConnectedLayer() = default;
 	void Compute();
 	void SetInput(std::vector<T> &val);
@@ -39,25 +43,28 @@ public:
 	inline int GetRowSize() {
 		return numRecUnits;
 	};
-	inline int GetColSize() {
+	int GetColSize() {
 		return numSendUnits;
 	};
-	inline concurrency::array_view<T, 1> &GetOutput() {
+	concurrency::array_view<T, 1> &GetOutput() {
 		return output;
 	};
+	void ComputeBackwardDelta(const concurrency::array_view<T, 1> &prop);
+	void ResetUpdateWeigths();
+	void PartialUpdateWeigths(const concurrency::array_view<T, 1> &prop);
 };
 
 #pragma region Constructors
 
 template <typename T>
-FullyConnectedLayer<T>::FullyConnectedLayer(int w[], int r, int c) : weights(r, c, w), output(r), input(c), bias(r) {
+FullyConnectedLayer<T>::FullyConnectedLayer(int w[], int r, int c) : weights(r, c, w), upWeights(r, c),output(r), input(c), bias(r), delta(c) {
 	numRecUnits = r;
 	numSendUnits = c;
 	InitBias();
 }
 
 template <typename T>
-FullyConnectedLayer<T>::FullyConnectedLayer(int r, int c) : weights(r, c), output(r), input(c), bias(r) {
+FullyConnectedLayer<T>::FullyConnectedLayer(int r, int c) : weights(r, c), upWeights(r, c), output(r), input(c), bias(r), delta(c) {
 	numRecUnits = r;
 	numSendUnits = c;
 	InitRandomWeigths();
@@ -112,7 +119,28 @@ void FullyConnectedLayer<T>::ComputeBackwardDelta(const concurrency::array_view<
 		d[idx] = d[idx] * (1 - in[idx]) * in[idx];
 	});
 }
+,
 
+template <typename T>
+void ResetUpdateWeigths() {
+	concurrency::array<T, 2> &u = upWeights;
+	concurrency::parallel_for_each(
+		u.extent,
+		[=](concurrency::index<2> idx) restrict(amp) {
+		int row = idx[0];
+		int col = idx[1];
+		u[i][j] = 0;
+	});
+}
+
+/*
+	Gets input the delta of next layer
+*/
+template <typename T>
+void PartialUpdateWeigths(const concurrency::array_view<T, 1> &prop) {
+	const concurrency::array_view<T, 1> &a = output;
+
+}
 /*TODO
 template <typename T>
 void FullyConnectedLayer<T>::UpdateWeights(float alpha) {

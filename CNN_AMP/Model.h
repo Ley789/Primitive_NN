@@ -1,6 +1,7 @@
 #pragma once
-#include "FullyConnectedLayer.h"
+
 #include "OutputLayer.h"
+#include "FullyConnectedLayer.h"
 #include <vector>
 #include <memory>
 
@@ -8,7 +9,7 @@ class Model
 {
 	int inputSize;
 	std::vector< std::shared_ptr< FullyConnectedLayer<float>>> model;
-	OutputLayer<float> output;
+	std::shared_ptr< OutputLayer<float> > output;
 
 	void ComputeHyp(std::vector<float> input);
 	bool done;

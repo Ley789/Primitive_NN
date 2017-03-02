@@ -1,6 +1,4 @@
 #include "Model.h"
-#include "FullyConnectedLayer.h"
-#include <memory>
 
 Model::~Model(){
 }
@@ -37,7 +35,7 @@ void Model::ComputeHyp(std::vector<float> input) {
 void Model::Finish() {
 	if (model.size() < 0) throw 12;
 	auto p = model.back();
-	output.SetOutput(p->GetOutput(), p->GetRowSize());
+	output = std::make_shared< OutputLayer<float>>(p->GetOutput(), p->GetRowSize());
 	done = true;
 }
 
@@ -46,8 +44,8 @@ std::vector<float> Model::GetHyp(std::vector<float> input) {
 
 	ComputeHyp(input);
 
-	auto val = output.GetOutput();
-	for (int i = 0; i < output.GetSize(); i++) {
+	auto val = output->GetOutput();
+	for (int i = 0; i < output->GetSize(); i++) {
 		res.push_back(val(i));
 	}
 	return res;
