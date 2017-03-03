@@ -1,24 +1,27 @@
 #pragma once
 
 
-
-//TODO RESTRUCT
-
 #include <amp.h>
 #include <time.h>
 #include <amp_math.h>
 #include <random>
 //TODO optminze operations (better use of parallelism)
-
+//TODO: add penalty parameter
+//TODO: create input layer, so that input of each FullyConnectedLayer can be a refernce
+//Notation: Layer l
 template <typename T>
 class FullyConnectedLayer
 {
 	//the weigths are strored the following way:
 	//the column w_ij where i is the reciving unit and j is the sending unit
 	concurrency::array_view<T,2> weights;
-	concurrency::array<T, 2> upWeights;
-	concurrency::array_view<T,1> input;
+	concurrency::array_view<T, 2> upWeights;
+
+	//Notation: a^l (we use as activition function sigma, so the z values are not needed)
+	const concurrency::array_view<T,1> input;
+	//Notation: a^(l + 1)
 	concurrency::array_view<T,1> output;
+	
 	concurrency::array_view<T, 1> bias;
 	concurrency::array_view<T, 1> delta;
 
@@ -29,6 +32,7 @@ class FullyConnectedLayer
 	inline bool CheckDimension(int s) {
 		return s == numSendUnits;
 	}
+	void ResetUpdateWeigths();
 
 public:
 	//TODO init weights but not output
@@ -50,8 +54,11 @@ public:
 		return output;
 	};
 	void ComputeBackwardDelta(const concurrency::array_view<T, 1> &prop);
-	void ResetUpdateWeigths();
 	void PartialUpdateWeigths(const concurrency::array_view<T, 1> &prop);
+	void UpdateWeights(float alpha, int m);
+	const concurrency::array_view<T, 1>& GetDelta() {
+		return delta;
+	}
 };
 
 #pragma region Constructors
@@ -61,6 +68,7 @@ FullyConnectedLayer<T>::FullyConnectedLayer(int w[], int r, int c) : weights(r, 
 	numRecUnits = r;
 	numSendUnits = c;
 	InitBias();
+	ResetUpdateWeigths();
 }
 
 template <typename T>
@@ -69,6 +77,7 @@ FullyConnectedLayer<T>::FullyConnectedLayer(int r, int c) : weights(r, c), upWei
 	numSendUnits = c;
 	InitRandomWeigths();
 	InitBias();
+	ResetUpdateWeigths();
 }
 
 #pragma endregion
@@ -119,17 +128,16 @@ void FullyConnectedLayer<T>::ComputeBackwardDelta(const concurrency::array_view<
 		d[idx] = d[idx] * (1 - in[idx]) * in[idx];
 	});
 }
-,
 
 template <typename T>
-void ResetUpdateWeigths() {
-	concurrency::array<T, 2> &u = upWeights;
+void FullyConnectedLayer<T>::ResetUpdateWeigths() {
+	concurrency::array_view<T, 2> &u = upWeights;
 	concurrency::parallel_for_each(
 		u.extent,
 		[=](concurrency::index<2> idx) restrict(amp) {
 		int row = idx[0];
 		int col = idx[1];
-		u[i][j] = 0;
+		u[row][col] = 0;
 	});
 }
 
@@ -137,33 +145,34 @@ void ResetUpdateWeigths() {
 	Gets input the delta of next layer
 */
 template <typename T>
-void PartialUpdateWeigths(const concurrency::array_view<T, 1> &prop) {
-	const concurrency::array_view<T, 1> &a = output;
+void FullyConnectedLayer<T>::PartialUpdateWeigths(const concurrency::array_view<T, 1> &nextDelta) {
+	const concurrency::array_view<T, 1> &a = input;
+	const concurrency::array_view<T, 1> &d = nextDelta;
+	concurrency::array_view<T, 2> &u = upWeights;
 
-}
-/*TODO
-template <typename T>
-void FullyConnectedLayer<T>::UpdateWeights(float alpha) {
-	//TODO make smarter exceptions
-	//Move exception to setInput
-	if (input.size != numSendUnits) throw 11;
-
-	int inner = numSendUnits;
 	concurrency::parallel_for_each(
-		output.extent,
-		[=](concurrency::index<1> idx) restrict(amp) {
-		output[idx] = 0;
+		upWeights.extent,
+		[=](index<2> idx) restrict(amp) {
 		int row = idx[0];
-		for (int i = 0; i < inner; i++) {
-			output[idx] += weights(row, i) * input(i);
-		}
-		output[idx] += bias;
-		//activation function
-		output[idx] = 1 / (1 + (concurrency::fast_math::exp((float)-output[idx]));
-	}
-	);
+		int col = idx[1];
+		u[row][col] = d[row] * a[col];
+	});
 }
-*/
+
+template <typename T>
+void FullyConnectedLayer<T>::UpdateWeights(float alpha, int m) {
+	T normalization = 1 / m;
+	concurrency::array<T, 2> &w = weights;
+	const concurrency::array<T, 2> &u = upWeights;
+	concurrency::parallel_for_each(
+		w.extent,
+		[=](concurrency::index<2> idx) restrict(amp) {
+		int row = idx[0];
+		int col = idx[1];
+		w[row][col] = w[row][col] - (alpha * u[row][col] * normalization);
+	});
+	ResetUpdateWeigths();
+}
 
 #pragma region Getter/Setter
 
